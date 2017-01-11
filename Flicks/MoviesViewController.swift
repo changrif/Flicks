@@ -10,23 +10,27 @@ import UIKit
 import AFNetworking
 import MBProgressHUD
 
-class MoviesViewController: UIViewController, UITableViewDataSource, UITableViewDelegate {
+class MoviesViewController: UIViewController, UICollectionViewDataSource, UICollectionViewDelegate, UISearchBarDelegate    {
     
-    @IBOutlet weak var tableView: UITableView!
+    @IBOutlet weak var collectionView: UICollectionView!
+    @IBOutlet weak var searchBar: UISearchBar!
+    
     var movies: [NSDictionary]?
-
+    var filteredData: [NSDictionary]!
+    
     override func viewDidLoad() {
         super.viewDidLoad()
+        collectionView.dataSource = self
+        collectionView.delegate = self
+        searchBar.delegate = self
         
-        tableView.dataSource = self
-        tableView.delegate = self
+        UIApplication.shared.statusBarStyle = .default
         
         let refreshControl = UIRefreshControl()
         refreshControl.addTarget(self, action: #selector(refreshControlAction(refreshControl:)), for: UIControlEvents.valueChanged)
+        collectionView.insertSubview(refreshControl, at: 0)
         
-        tableView.insertSubview(refreshControl, at: 0)
         // Do any additional setup after loading the view.
-        
         let apiKey = "a07e22bc18f5cb106bfe4cc1f83ad8ed"
         let url = URL(string: "https://api.themoviedb.org/3/movie/now_playing?api_key=\(apiKey)")!
         let request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 10)
@@ -38,20 +42,84 @@ class MoviesViewController: UIViewController, UITableViewDataSource, UITableView
             if let data = data {
                 if let dataDictionary = try! JSONSerialization.jsonObject(with: data, options: []) as? NSDictionary {
                     print(dataDictionary)
-                    
                     self.movies = (dataDictionary["results"] as! [NSDictionary])
-                    self.tableView.reloadData()
+                    self.filteredData = self.movies
+                    self.collectionView.reloadData()
                 }
             }
         }
         task.resume()
     }
     
+    func collectionView(_ collectionView: UICollectionView, numberOfItemsInSection section: Int) -> Int {
+        if let movies = filteredData {
+            return movies.count
+        }   else{
+            return 0
+        }
+    }
+    
+    func collectionView(_ collectionView: UICollectionView, cellForItemAt indexPath: IndexPath) -> UICollectionViewCell {
+        let cell = collectionView.dequeueReusableCell(withReuseIdentifier: "com.codepath.MovieCell", for: indexPath as IndexPath) as! MovieCell
+        let movie = filteredData![indexPath.row]
+        
+        if let posterPath = movie["poster_path"] as? String {
+            let title = movie["title"] as! String
+            let overview = movie["overview"] as! String
+            let baseUrl = "https://image.tmdb.org/t/p/w500"
+            let imageURL = NSURL(string: baseUrl + posterPath)
+            let imageRequest = NSURLRequest(url: imageURL as! URL)
+            
+            cell.posterView.setImageWith(
+                imageRequest as URLRequest,
+                placeholderImage: nil,
+                success: { (imageRequest, imageResponse, image) -> Void in
+                    
+                    // imageResponse will be nil if the image is cached
+                    if imageResponse != nil {
+                        print("Image was NOT cached, fade in image")
+                        cell.posterView.alpha = 0.0
+                        cell.posterView.image = image
+                        UIView.animate(withDuration: 0.3, animations: { () -> Void in
+                            cell.posterView.alpha = 1.0
+                        })
+                    } else {
+                        print("Image was cached so just update the image")
+                        cell.posterView.image = image
+                    }
+            },
+                failure: { (imageRequest, imageResponse, error) -> Void in
+                    cell.posterView.image = nil
+            })
+        }   else   {
+            cell.posterView.image = nil
+        }
+        
+        return cell
+    }
+    
+    func searchBar(_ searchBar: UISearchBar,
+                   textDidChange searchText: String) {
+        print("search")
+        if searchText.isEmpty {
+            filteredData = movies
+        } else {
+            filteredData = searchText.isEmpty ? movies : movies!.filter({(dataItem: NSDictionary) -> Bool in
+                // If dataItem matches the searchText, return true to include it
+                if (dataItem["title"] as! String).range(of: searchText, options: .caseInsensitive) != nil {
+                    return true
+                } else {
+                    return false
+                }
+            })
+        }
+        collectionView.reloadData()
+    }
+    
     // Makes a network request to get updated data
     // Updates the tableView with the new data
     // Hides the RefreshControl
     func refreshControlAction(refreshControl: UIRefreshControl) {
-        
         // ... Create the NSURLRequest (myRequest) ...
         let apiKey = "a07e22bc18f5cb106bfe4cc1f83ad8ed"
         let url = URL(string: "https://api.themoviedb.org/3/movie/now_playing?api_key=\(apiKey)")!
@@ -63,12 +131,12 @@ class MoviesViewController: UIViewController, UITableViewDataSource, UITableView
         let task: URLSessionDataTask = session.dataTask(with: request) { (data: Data?, response: URLResponse?, error: Error?) in
             if let data = data {
                 if let dataDictionary = try! JSONSerialization.jsonObject(with: data, options: []) as? NSDictionary {
-                    print(dataDictionary)
-                    
+                    //print(dataDictionary)
+                    self.filteredData = self.movies
                     self.movies = (dataDictionary["results"] as! [NSDictionary])
                     
                     // Reload the tableView now that there is new data
-                    self.tableView.reloadData()
+                    self.collectionView.reloadData()
                     
                     // Tell the refreshControl to stop spinning
                     refreshControl.endRefreshing()
@@ -83,30 +151,14 @@ class MoviesViewController: UIViewController, UITableViewDataSource, UITableView
         // Dispose of any resources that can be recreated.
     }
     
-    func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
-        if let movies = movies {
-            return movies.count
-        }   else{
-            return 0
-        }
+    override func viewWillDisappear(_ animated: Bool) {
+        super.viewWillDisappear(animated)
+        
+        UIApplication.shared.statusBarStyle = UIStatusBarStyle.default
+        
     }
-    
-    func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell  {
-        let cell = tableView.dequeueReusableCell(withIdentifier: "MovieCell", for: indexPath) as! MovieCell
-        
-        let movie = movies![indexPath.row]
-        let title = movie["title"] as! String
-        let overview = movie["overview"] as! String
-        let baseUrl = "https://image.tmdb.org/t/p/w500"
-        let posterPath = movie["poster_path"] as! String
-        let imageURL = NSURL(string: baseUrl + posterPath)
-        
-        cell.titleLabel.text = title
-        cell.overviewLabel.text = overview
-        cell.posterView.setImageWith(imageURL as! URL)
-        
-        print("row \(indexPath.row)")
-        return cell
+    @IBAction func onTap(_ sender: AnyObject) {
+        view.endEditing(true)
     }
 
     /*
