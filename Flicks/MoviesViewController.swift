@@ -10,20 +10,26 @@ import UIKit
 import AFNetworking
 import MBProgressHUD
 
-class MoviesViewController: UIViewController, UICollectionViewDataSource, UICollectionViewDelegate, UISearchBarDelegate    {
+class MoviesViewController: UIViewController, UICollectionViewDataSource, UICollectionViewDelegate, UISearchBarDelegate, UIGestureRecognizerDelegate   {
     
     @IBOutlet weak var collectionView: UICollectionView!
     @IBOutlet weak var searchBar: UISearchBar!
     
     var movies: [NSDictionary]?
     var filteredData: [NSDictionary]!
+    var endpoint: String = "now_playing"
+    var cancelsTouchesInView: Bool!
+    
+    @IBAction func handleTap(_ sender: AnyObject) {
+        self.view.endEditing(true)
+    }
     
     override func viewDidLoad() {
         super.viewDidLoad()
         collectionView.dataSource = self
         collectionView.delegate = self
         searchBar.delegate = self
-        
+
         UIApplication.shared.statusBarStyle = .default
         
         let refreshControl = UIRefreshControl()
@@ -32,7 +38,7 @@ class MoviesViewController: UIViewController, UICollectionViewDataSource, UIColl
         
         // Do any additional setup after loading the view.
         let apiKey = "a07e22bc18f5cb106bfe4cc1f83ad8ed"
-        let url = URL(string: "https://api.themoviedb.org/3/movie/now_playing?api_key=\(apiKey)")!
+        let url = URL(string: "https://api.themoviedb.org/3/movie/\(endpoint)?api_key=\(apiKey)")!
         let request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 10)
         let session = URLSession(configuration: .default, delegate: nil, delegateQueue: OperationQueue.main)
         
@@ -64,8 +70,6 @@ class MoviesViewController: UIViewController, UICollectionViewDataSource, UIColl
         let movie = filteredData![indexPath.row]
         
         if let posterPath = movie["poster_path"] as? String {
-            let title = movie["title"] as! String
-            let overview = movie["overview"] as! String
             let baseUrl = "https://image.tmdb.org/t/p/w500"
             let imageURL = NSURL(string: baseUrl + posterPath)
             let imageRequest = NSURLRequest(url: imageURL as! URL)
@@ -151,24 +155,29 @@ class MoviesViewController: UIViewController, UICollectionViewDataSource, UIColl
         // Dispose of any resources that can be recreated.
     }
     
+    override func viewWillAppear(_ animated: Bool) {
+        super.viewWillAppear(animated)
+        self.tabBarController?.tabBar.isHidden = false
+    }
+    
     override func viewWillDisappear(_ animated: Bool) {
         super.viewWillDisappear(animated)
-        
         UIApplication.shared.statusBarStyle = UIStatusBarStyle.default
+        searchBar.resignFirstResponder()
+    }
         
-    }
-    @IBAction func onTap(_ sender: AnyObject) {
-        view.endEditing(true)
-    }
-
-    /*
     // MARK: - Navigation
 
     // In a storyboard-based application, you will often want to do a little preparation before navigation
-    override func prepareForSegue(segue: UIStoryboardSegue, sender: AnyObject?) {
+    override func prepare(for segue: UIStoryboardSegue, sender: Any?) {
+        let cell = sender as! UICollectionViewCell
+        let indexPath = collectionView.indexPath(for: cell)
+        let movie = filteredData![(indexPath!.row)]
+        
+        let detailViewController = segue.destination as! DetailViewController
+        
+        detailViewController.movie = movie
         // Get the new view controller using segue.destinationViewController.
         // Pass the selected object to the new view controller.
     }
-    */
-
 }
